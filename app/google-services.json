@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1081143162297",
+    "project_id": "pictionis-8733b",
+    "storage_bucket": "pictionis-8733b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1081143162297:android:3ded1dee85d724b1147268",
+        "android_client_info": {
+          "package_name": "com.pictionis.ap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyARkk6Rjxz5GEFgNeLgVNS7t2w9G0h1x-4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
