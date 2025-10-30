@@ -13,10 +13,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.pictionis.ap.auth.AuthViewModel
-import com.pictionis.ap.ui.screens.*
 import com.pictionis.ap.ui.theme.PictionisTheme
 import com.pictionis.ap.ui.navigation.AuthNavHost
-import com.pictionis.ap.ui.screens.HomeScreen
+import com.pictionis.ap.ui.navigation.GameNavHost
+import com.pictionis.ap.ui.screen.HomeScreen
 
 
 class MainActivity : ComponentActivity() {
@@ -41,8 +41,9 @@ fun AppContent(authViewModel: AuthViewModel, modifier: Modifier = Modifier) {
     val currentUser by authViewModel.currentUser.collectAsState()
 
     if (currentUser != null) {
-        HomeScreen() // L'utilisateur est connecté → on affiche HomeScreen
+        GameNavHost(authViewModel = authViewModel, modifier = modifier)
     } else {
         AuthNavHost(authViewModel = authViewModel, modifier = modifier)
     }
 }
+
