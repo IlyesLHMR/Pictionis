@@ -1,7 +1,7 @@
 package com.pictionis.ap.ui.navigation
 
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.*
 import com.pictionis.ap.auth.AuthViewModel
 import com.pictionis.ap.ui.screen.HomeScreen
 import com.pictionis.ap.ui.screen.CreateGameScreen
@@ -21,9 +21,11 @@ fun GameNavHost(
             onJoinGame = { currentScreen = "joinGame" }
         )
         "createGame" -> CreateGameScreen(
+            authViewModel = authViewModel,
             onBack = { currentScreen = "home" }
         )
         "joinGame" -> JoinGameScreen(
+            authViewModel = authViewModel,
             onBack = { currentScreen = "home" }
         )
     }
