@@ -14,7 +14,8 @@ import com.pictionis.ap.viewModel.GameViewModel
 fun JoinGameScreen(
     authViewModel: AuthViewModel,
     onBack: () -> Unit,
-    gameViewModel: GameViewModel = viewModel()
+    gameViewModel: GameViewModel = viewModel(),
+    onGameJoined: (String) -> Unit // Ajout du paramètre pour navigation
 ) {
     var gameIdInput by remember { mutableStateOf("") }
     var joinResult by remember { mutableStateOf<String?>(null) }
@@ -42,7 +43,12 @@ fun JoinGameScreen(
             val userId = currentUser?.uid
             if (gameIdInput.isNotBlank() && userId != null) {
                 gameViewModel.joinGame(gameIdInput, userId) { success ->
-                    joinResult = if (success) "Partie rejointe !" else "Impossible de rejoindre"
+                    joinResult = if (success) {
+                        onGameJoined(gameIdInput) // Navigation vers le lobby
+                        "Partie rejointe !"
+                    } else {
+                        "Impossible de rejoindre"
+                    }
                 }
             } else {
                 joinResult = "ID ou utilisateur manquant"
