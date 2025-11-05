@@ -14,7 +14,8 @@ import com.pictionis.ap.viewModel.GameViewModel
 fun CreateGameScreen(
     authViewModel: AuthViewModel,
     onBack: () -> Unit,
-    gameViewModel: GameViewModel = viewModel()
+    gameViewModel: GameViewModel = viewModel(),
+    onGameCreated: (String) -> Unit // Ajout du paramètre pour navigation
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     var createdGameId by remember { mutableStateOf<String?>(null) }
@@ -33,6 +34,7 @@ fun CreateGameScreen(
             val hostId = currentUser?.uid ?: return@Button
             gameViewModel.createGame(hostId) { gameId ->
                 createdGameId = gameId
+                onGameCreated(gameId) // Navigation vers le lobby
             }
         }) {
             Text("Créer la partie")
