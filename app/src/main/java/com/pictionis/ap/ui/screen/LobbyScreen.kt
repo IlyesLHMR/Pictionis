@@ -15,19 +15,31 @@ import com.pictionis.ap.model.Game
 fun LobbyScreen(
     gameId: String,
     authViewModel: AuthViewModel,
-    onStartGame: () -> Unit, // Appelé quand la partie démarre
+    onStartGame: () -> Unit,
     onBack: () -> Unit,
     gameViewModel: GameViewModel = viewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
     var gameState by remember { mutableStateOf<Game?>(null) }
+    var hasNavigated by remember { mutableStateOf(false) }
 
     // Ecoute en temps réel les changements de la partie
     LaunchedEffect(gameId) {
         gameViewModel.listenToGame(gameId) { game ->
+            val previousStarted = gameState?.started
             gameState = game
-            // Si la partie démarre, on appelle onStartGame
-            if (game?.started == true) onStartGame()
+
+            // Si la partie démarre (transition false -> true), naviguer vers le jeu
+            if (game?.started == true && previousStarted == false && !hasNavigated) {
+                hasNavigated = true
+                onStartGame()
+            }
+        }
+    }
+
+    DisposableEffect(gameId) {
+        onDispose {
+            gameViewModel.stopListeningToGame(gameId)
         }
     }
 
@@ -43,20 +55,64 @@ fun LobbyScreen(
         Text("ID : $gameId")
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Joueurs :")
-        gameState?.players?.forEach { playerId ->
-            Text(playerId)
-        }
+        gameState?.let { game ->
+            Text("Joueurs : ${game.players.size}", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+            game.players.forEach { playerId ->
+                var playerUsername by remember { mutableStateOf<String?>(null) }
 
-        // Bouton démarrer visible uniquement pour le host
-        if (gameState?.hostId == currentUser?.uid && gameState?.started == false) {
-            Button(onClick = {
-                gameViewModel.startGame(gameId)
-            }) {
-                Text("Démarrer la partie")
+                LaunchedEffect(playerId) {
+                    authViewModel.getUsernameById(playerId) { username ->
+                        playerUsername = username
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = playerUsername ?: playerId,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    if (playerId == game.hostId) {
+                        Text(" (Créateur)", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Message d'attente
+            if (!game.started && game.players.size < 2) {
+                Text(
+                    "En attente d'un autre joueur...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // Bouton démarrer visible uniquement pour le host
+            if (game.hostId == currentUser?.uid && !game.started) {
+                val canStart = game.players.size >= 2
+
+                Button(
+                    onClick = { gameViewModel.startGame(gameId) },
+                    enabled = canStart
+                ) {
+                    Text(if (canStart) "Démarrer la partie" else "Attente d'un joueur...")
+                }
+            } else if (!game.started) {
+                Text(
+                    "En attente que le créateur démarre la partie...",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        } ?: run {
+            CircularProgressIndicator()
+            Text("Chargement de la partie...")
         }
 
         Spacer(modifier = Modifier.height(16.dp))

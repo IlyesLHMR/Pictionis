@@ -8,6 +8,7 @@ import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import com.pictionis.ap.model.Game
+import kotlinx.coroutines.tasks.await
 
 class GameViewModel : ViewModel() {
     private val db: DatabaseReference = FirebaseDatabase
@@ -17,12 +18,14 @@ class GameViewModel : ViewModel() {
     // keep references to value listeners so we can detach them
     private val gameValueListeners = mutableMapOf<String, ValueEventListener>()
 
-    // Création d'une partie : initialise tous les champs du modèle Game
-    fun createGame(hostId: String, onSuccess: (String) -> Unit = {}) {
+    // Création d'une partie avec le pseudo du host
+    fun createGame(hostId: String, hostUsername: String, onSuccess: (String) -> Unit = {}) {
         val gameId = db.push().key ?: return
+
         val game = Game(
             id = gameId,
             hostId = hostId,
+            hostUsername = hostUsername,
             players = listOf(hostId),
             started = false,
             currentWord = "",
@@ -31,11 +34,36 @@ class GameViewModel : ViewModel() {
             round = 1,
             chat = emptyList()
         )
+
         db.child(gameId).setValue(game)
             .addOnSuccessListener { onSuccess(gameId) }
             .addOnFailureListener { error ->
-                Log.e("GameViewModel", "Erreur lors de la création de la partie : ${error.message}")
+                Log.e("GameViewModel", "Erreur création partie: ${error.message}")
             }
+    }
+
+    // Recherche une partie par pseudo du host (uniquement les parties non démarrées)
+    suspend fun findGameByHostUsername(hostUsername: String): String? {
+        return try {
+            val snapshot = db.orderByChild("hostUsername")
+                .equalTo(hostUsername)
+                .get()
+                .await()
+
+            // Filtrer pour trouver uniquement les parties non démarrées
+            var foundGameId: String? = null
+            snapshot.children.forEach { child ->
+                val game = child.getValue(Game::class.java)
+                if (game != null && !game.started && foundGameId == null) {
+                    foundGameId = child.key
+                }
+            }
+
+            foundGameId
+        } catch (e: Exception) {
+            Log.e("GameViewModel", "Erreur recherche partie: ${e.message}")
+            null
+        }
     }
 
     // Rejoindre une partie : ajoute le joueur, met à jour les scores
@@ -45,23 +73,38 @@ class GameViewModel : ViewModel() {
             val game = snapshot.getValue(Game::class.java)
             if (game != null) {
                 val players = game.players.toMutableList()
-                if (!players.contains(userId)) players.add(userId)
+                if (!players.contains(userId)) {
+                    players.add(userId)
+                }
+
                 val scores = game.scores.toMutableMap()
-                if (!scores.containsKey(userId)) scores[userId] = 0
-                gameRef.child("players").setValue(players)
-                gameRef.child("scores").setValue(scores)
+                if (!scores.containsKey(userId)) {
+                    scores[userId] = 0
+                }
+
+                // Mettre à jour la partie entière pour garantir que les listeners se déclenchent
+                val updatedGame = game.copy(
+                    players = players,
+                    scores = scores
+                )
+
+                gameRef.setValue(updatedGame)
                     .addOnSuccessListener { onResult(true) }
-                    .addOnFailureListener { onResult(false) }
+                    .addOnFailureListener { error ->
+                        Log.e("GameViewModel", "Erreur ajout joueur: ${error.message}")
+                        onResult(false)
+                    }
             } else {
                 onResult(false)
             }
-        }.addOnFailureListener { onResult(false) }
+        }.addOnFailureListener { error ->
+            Log.e("GameViewModel", "Erreur récupération partie: ${error.message}")
+            onResult(false)
+        }
     }
 
     // Listen to game value changes (stores listener for later detach)
     fun listenToGame(gameId: String, onUpdate: (Game?) -> Unit) {
-        if (gameValueListeners.containsKey(gameId)) return
-
         val ref = db.child(gameId)
         val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -69,7 +112,7 @@ class GameViewModel : ViewModel() {
                 onUpdate(game)
             }
             override fun onCancelled(error: DatabaseError) {
-                Log.e("GameViewModel", "listenToGame cancelled: ${error.message}")
+                Log.e("GameViewModel", "Erreur listener: ${error.message}")
                 onUpdate(null)
             }
         }
@@ -87,18 +130,19 @@ class GameViewModel : ViewModel() {
         db.child(gameId).child("started").setValue(true)
     }
 
-    // Met à jour le mot à deviner et le dessinateur
+    // Fonctions pour le gameplay (seront utilisées dans le développement futur)
+    @Suppress("unused")
     fun setCurrentWordAndDrawer(gameId: String, word: String, drawerId: String) {
         db.child(gameId).child("currentWord").setValue(word)
         db.child(gameId).child("drawerId").setValue(drawerId)
     }
 
-    // Met à jour le score d'un joueur
+    @Suppress("unused")
     fun updateScore(gameId: String, userId: String, newScore: Int) {
         db.child(gameId).child("scores").child(userId).setValue(newScore)
     }
 
-    // Change le round
+    @Suppress("unused")
     fun setRound(gameId: String, round: Int) {
         db.child(gameId).child("round").setValue(round)
     }

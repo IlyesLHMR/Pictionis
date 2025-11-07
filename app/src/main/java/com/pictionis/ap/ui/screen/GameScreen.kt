@@ -21,6 +21,8 @@ import com.pictionis.ap.viewModel.DrawingViewModel
 import com.pictionis.ap.viewModel.GameViewModel
 import com.pictionis.ap.ui.components.DrawingCanvas
 
+import kotlinx.coroutines.launch
+
 @Composable
 fun GameScreen(
     gameId: String,
@@ -31,11 +33,15 @@ fun GameScreen(
     chatViewModel: ChatViewModel = viewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
+    val scope = rememberCoroutineScope()
 
     var gameState by remember { mutableStateOf<Game?>(null) }
     val strokes = remember { mutableStateListOf<Stroke>() }
     var chatMessages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
     var messageText by remember { mutableStateOf("") }
+
+    // Cache des pseudos pour le chat
+    val usernameCache = remember { mutableMapOf<String, String>() }
 
     // Attach listeners once when composable is launched for this gameId
     LaunchedEffect(gameId) {
@@ -150,8 +156,21 @@ fun GameScreen(
             } else {
                 LazyColumn {
                     items(chatMessages) { msg ->
+                        var displayName by remember { mutableStateOf(msg.userId) }
+
+                        LaunchedEffect(msg.userId) {
+                            // Récupérer le pseudo depuis le cache ou DB
+                            if (usernameCache.containsKey(msg.userId)) {
+                                displayName = usernameCache[msg.userId]!!
+                            } else {
+                                val username = chatViewModel.getUsernameFromUid(msg.userId)
+                                usernameCache[msg.userId] = username
+                                displayName = username
+                            }
+                        }
+
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                            Text(text = msg.userId, style = MaterialTheme.typography.labelSmall)
+                            Text(text = displayName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(text = msg.message)
                             Divider(modifier = Modifier.padding(top = 4.dp))
                         }

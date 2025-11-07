@@ -3,6 +3,7 @@ package com.pictionis.ap.model
 data class Game(
     val id: String = "",
     val hostId: String = "",
+    val hostUsername: String = "",       // Pseudo du créateur de la partie
     val players: List<String> = emptyList(),
     val started: Boolean = false,
     val currentWord: String = "",        // Mot à deviner
