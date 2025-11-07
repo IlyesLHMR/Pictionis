@@ -19,6 +19,7 @@ fun SignupScreen(
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
     val authError by authViewModel.authError.collectAsState()
@@ -40,6 +41,16 @@ fun SignupScreen(
     ) {
         Text("Créer un compte", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
+
+        OutlinedTextField(
+            value = username,
+            onValueChange = { username = it },
+            label = { Text("Pseudo") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
 
         OutlinedTextField(
             value = email,
@@ -65,7 +76,7 @@ fun SignupScreen(
         Button(
             onClick = {
                 isLoading = true
-                authViewModel.signup(email, password)
+                authViewModel.signup(email, password, username)
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading
