@@ -22,7 +22,7 @@ class DrawingViewModel : ViewModel() {
             .addOnFailureListener { e -> Log.e("DrawingViewModel", "sendStroke failed: ${e.message}") }
     }
 
-    fun listenToStrokes(gameId: String, onStroke: (Stroke) -> Unit) {
+    fun listenToStrokes(gameId: String, onStroke: (Stroke) -> Unit, onClear: () -> Unit = {}) {
         if (strokeListeners.containsKey(gameId)) return
         val strokesRef = db.child(gameId).child("strokes")
         val listener = object : ChildEventListener {
@@ -31,7 +31,14 @@ class DrawingViewModel : ViewModel() {
                 if (stroke != null) onStroke(stroke)
             }
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
-            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {
+                // Quand tous les strokes sont supprimés, appeler onClear
+                strokesRef.get().addOnSuccessListener {
+                    if (!it.exists()) {
+                        onClear()
+                    }
+                }
+            }
             override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
             override fun onCancelled(error: DatabaseError) { Log.e("DrawingViewModel", "listenToStrokes cancelled: ${error.message}") }
         }

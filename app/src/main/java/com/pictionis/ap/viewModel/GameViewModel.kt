@@ -130,20 +130,59 @@ class GameViewModel : ViewModel() {
         db.child(gameId).child("started").setValue(true)
     }
 
-    // Fonctions pour le gameplay (seront utilisées dans le développement futur)
-    @Suppress("unused")
+    // Fonctions pour le gameplay
     fun setCurrentWordAndDrawer(gameId: String, word: String, drawerId: String) {
         db.child(gameId).child("currentWord").setValue(word)
         db.child(gameId).child("drawerId").setValue(drawerId)
     }
 
-    @Suppress("unused")
     fun updateScore(gameId: String, userId: String, newScore: Int) {
         db.child(gameId).child("scores").child(userId).setValue(newScore)
     }
 
-    @Suppress("unused")
     fun setRound(gameId: String, round: Int) {
         db.child(gameId).child("round").setValue(round)
+    }
+
+    // Passer au joueur suivant
+    fun nextTurn(gameId: String, onNewWord: (String) -> Unit) {
+        val gameRef = db.child(gameId)
+        gameRef.get().addOnSuccessListener { snapshot ->
+            val game = snapshot.getValue(Game::class.java)
+            if (game != null) {
+                val players = game.players
+                val currentDrawerIndex = players.indexOf(game.drawerId)
+                val nextDrawerIndex = (currentDrawerIndex + 1) % players.size
+                val nextDrawer = players[nextDrawerIndex]
+
+                // Nouveau mot aléatoire
+                val newWord = com.pictionis.ap.utils.WordsLibrary.getRandomWord()
+
+                // Incrémenter le tour si on revient au premier joueur
+                val newRound = if (nextDrawerIndex == 0) game.round + 1 else game.round
+
+                // Mettre à jour Firebase
+                gameRef.child("drawerId").setValue(nextDrawer)
+                gameRef.child("currentWord").setValue(newWord)
+                gameRef.child("round").setValue(newRound)
+
+                onNewWord(newWord)
+            }
+        }.addOnFailureListener { error ->
+            Log.e("GameViewModel", "Erreur nextTurn: ${error.message}")
+        }
+    }
+
+    // Récupérer le pseudo d'un joueur
+    suspend fun getUsernameFromUid(uid: String): String {
+        return try {
+            val usersDb = FirebaseDatabase
+                .getInstance("https://pictionis-8733b-default-rtdb.europe-west1.firebasedatabase.app")
+                .getReference("users")
+            val snap = usersDb.child(uid).child("username").get().await()
+            snap.getValue(String::class.java) ?: uid
+        } catch (e: Exception) {
+            uid
+        }
     }
 }

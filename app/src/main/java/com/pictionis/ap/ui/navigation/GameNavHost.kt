@@ -8,6 +8,7 @@ import com.pictionis.ap.ui.screen.HomeScreen
 import com.pictionis.ap.ui.screen.CreateGameScreen
 import com.pictionis.ap.ui.screen.JoinGameScreen
 import com.pictionis.ap.ui.screen.LobbyScreen
+import com.pictionis.ap.ui.screen.WordSelectionScreen
 import com.pictionis.ap.ui.screen.GameScreen
 import com.pictionis.ap.viewModel.GameViewModel
 
@@ -24,7 +25,9 @@ fun GameNavHost(
         "home" -> HomeScreen(
             authViewModel = authViewModel,
             onCreateGame = { currentScreen = "createGame" },
-            onJoinGame = { currentScreen = "joinGame" }
+            onJoinGame = { currentScreen = "joinGame" },
+            onResumeGame = { currentScreen = "game" },
+            hasOngoingGame = currentGameId != null
         )
         "createGame" -> CreateGameScreen(
             authViewModel = authViewModel,
@@ -49,8 +52,21 @@ fun GameNavHost(
                 gameId = gameId,
                 authViewModel = authViewModel,
                 gameViewModel = gameViewModel,
-                onStartGame = { currentScreen = "game" }, // Navigue vers l'écran du jeu
+                onStartGame = { currentScreen = "wordSelection" }, // Navigue vers la sélection de mot
                 onBack = { currentScreen = "home"; currentGameId = null }
+            )
+        }
+        "wordSelection" -> currentGameId?.let { gameId ->
+            WordSelectionScreen(
+                gameId = gameId,
+                onWordSelected = { word ->
+                    // Définir le mot et le dessinateur dans Firebase
+                    val currentUser = authViewModel.currentUser.value
+                    currentUser?.uid?.let { userId ->
+                        gameViewModel.setCurrentWordAndDrawer(gameId, word, userId)
+                    }
+                    currentScreen = "game"
+                }
             )
         }
         "game" -> currentGameId?.let { gameId ->
@@ -59,7 +75,7 @@ fun GameNavHost(
                 authViewModel = authViewModel,
                 onBack = {
                     currentScreen = "home"
-                    currentGameId = null
+                    // Ne pas supprimer currentGameId pour pouvoir y retourner
                 },
                 gameViewModel = gameViewModel
             )

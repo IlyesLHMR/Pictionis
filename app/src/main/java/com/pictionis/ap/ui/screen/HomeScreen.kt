@@ -12,7 +12,9 @@ import com.pictionis.ap.auth.AuthViewModel
 fun HomeScreen(
     authViewModel: AuthViewModel,
     onCreateGame: () -> Unit = {},
-    onJoinGame: () -> Unit = {}
+    onJoinGame: () -> Unit = {},
+    onResumeGame: () -> Unit = {},
+    hasOngoingGame: Boolean = false
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
 
@@ -29,6 +31,23 @@ fun HomeScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Bouton pour reprendre la partie en cours (si elle existe)
+        if (hasOngoingGame) {
+            Button(
+                onClick = onResumeGame,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("🎮 Reprendre la partie")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            HorizontalDivider()
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
 
         Button(
             onClick = onCreateGame,

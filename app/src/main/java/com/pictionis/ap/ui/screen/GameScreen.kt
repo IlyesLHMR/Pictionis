@@ -20,7 +20,9 @@ import com.pictionis.ap.viewModel.ChatViewModel
 import com.pictionis.ap.viewModel.DrawingViewModel
 import com.pictionis.ap.viewModel.GameViewModel
 import com.pictionis.ap.ui.components.DrawingCanvas
-
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -33,24 +35,45 @@ fun GameScreen(
     chatViewModel: ChatViewModel = viewModel()
 ) {
     val currentUser by authViewModel.currentUser.collectAsState()
-    val scope = rememberCoroutineScope()
 
     var gameState by remember { mutableStateOf<Game?>(null) }
     val strokes = remember { mutableStateListOf<Stroke>() }
     var chatMessages by remember { mutableStateOf<List<ChatMessage>>(emptyList()) }
-    var messageText by remember { mutableStateOf("") }
+    var guessText by remember { mutableStateOf("") }
+    var chatText by remember { mutableStateOf("") }
 
-    // Cache des pseudos pour le chat
+    // Cache des pseudos
     val usernameCache = remember { mutableMapOf<String, String>() }
+    var drawerUsername by remember { mutableStateOf("...") }
+
+    // Récupérer le pseudo du dessinateur
+    LaunchedEffect(gameState?.drawerId) {
+        gameState?.drawerId?.let { drawerId ->
+            if (usernameCache.containsKey(drawerId)) {
+                drawerUsername = usernameCache[drawerId]!!
+            } else {
+                val username = gameViewModel.getUsernameFromUid(drawerId)
+                usernameCache[drawerId] = username
+                drawerUsername = username
+            }
+        }
+    }
 
     // Attach listeners once when composable is launched for this gameId
     LaunchedEffect(gameId) {
         gameViewModel.listenToGame(gameId) { game -> gameState = game }
-        drawingViewModel.listenToStrokes(gameId) { stroke ->
-            if (strokes.none { it.id == stroke.id }) {
-                strokes.add(stroke)
+        drawingViewModel.listenToStrokes(
+            gameId = gameId,
+            onStroke = { stroke ->
+                if (strokes.none { it.id == stroke.id }) {
+                    strokes.add(stroke)
+                }
+            },
+            onClear = {
+                // Quand Firebase efface les strokes, on efface aussi localement
+                strokes.clear()
             }
-        }
+        )
         chatViewModel.listenToChat(gameId) { messages ->
             chatMessages = messages
         }
@@ -77,7 +100,14 @@ fun GameScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Partie: $gameId", style = MaterialTheme.typography.titleMedium)
+            Column {
+                Text(text = "Pictionary", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = "Dessinateur : $drawerUsername",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             Button(onClick = onBack) { Text("Quitter") }
         }
 
@@ -100,7 +130,7 @@ fun GameScreen(
                     strokesRemote = strokes,
                     currentUserId = currentUser?.uid,
                     isDrawingEnabled = true,
-                    brushColor = androidx.compose.ui.graphics.Color.Black,
+                    brushColor = Color.Black,
                     brushSize = 6f,
                     modifier = Modifier.fillMaxSize(),
                     onStrokeFinished = { stroke ->
@@ -115,34 +145,150 @@ fun GameScreen(
                     strokesRemote = strokes,
                     currentUserId = currentUser?.uid,
                     isDrawingEnabled = false,
-                    brushColor = androidx.compose.ui.graphics.Color.Black,
+                    brushColor = Color.Black,
                     brushSize = 6f,
                     modifier = Modifier.fillMaxSize(),
                     onStrokeFinished = {}
                 )
-                // overlay text
-                if (drawer == null) {
-                    Text("En attente du dessinateur...", modifier = Modifier.align(Alignment.Center))
-                } else {
-                    Text("En attente du dessin du joueur : $drawer", modifier = Modifier.align(Alignment.Center))
+                // overlay text - n'affiche que s'il n'y a pas de traits
+                if (strokes.isEmpty()) {
+                    if (drawer == null) {
+                        Text("En attente du dessinateur...", modifier = Modifier.align(Alignment.Center))
+                    } else {
+                        Text("$drawerUsername dessine...", modifier = Modifier.align(Alignment.Center))
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Info partie simple
-        Row(
+        // Info partie
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Text("Tour: ${gameState?.round ?: "-"}")
-            Text("Drawer: ${gameState?.drawerId ?: "-"}")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Tour: ${gameState?.round ?: "-"}", style = MaterialTheme.typography.bodyMedium)
+                    Text("Votre score: ${gameState?.scores?.get(currentUser?.uid) ?: 0}",
+                         style = MaterialTheme.typography.bodyMedium,
+                         color = MaterialTheme.colorScheme.primary)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Rôle: ${if (isDrawer) "Dessinateur" else "Devineur"}",
+                         style = MaterialTheme.typography.bodyMedium)
+                    if (!isDrawer) {
+                        Text("Indices: ${gameState?.currentWord?.length ?: 0} lettres",
+                             style = MaterialTheme.typography.bodySmall,
+                             color = Color.Gray)
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Chat area
+        // ZONE DE DEVINETTE (séparée du chat)
+        if (isDrawer) {
+            // Le dessinateur voit le mot à dessiner
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "Mot à dessiner :",
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    Text(
+                        text = gameState?.currentWord?.uppercase() ?: "???",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        } else {
+            // Les devineurs ont un champ dédié
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Devinez le mot", style = MaterialTheme.typography.labelMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = guessText,
+                        onValueChange = { guessText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Tapez votre réponse...") },
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val uid = currentUser?.uid ?: return@Button
+                            if (guessText.isNotBlank()) {
+                                val guess = guessText.trim()
+                                val currentWord = gameState?.currentWord?.trim() ?: ""
+
+                                // Vérifier si c'est correct
+                                if (guess.equals(currentWord, ignoreCase = true)) {
+                                    // Bonne réponse !
+                                    val successMessage = ChatMessage(
+                                        userId = uid,
+                                        message = "✓ A trouvé le mot : $currentWord !",
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                    chatViewModel.sendMessage(gameId, successMessage)
+
+                                    // +10 points
+                                    val currentScore = gameState?.scores?.get(uid) ?: 0
+                                    gameViewModel.updateScore(gameId, uid, currentScore + 10)
+
+                                    guessText = ""
+
+                                    // Effacer le canvas et passer au joueur suivant
+                                    CoroutineScope(Dispatchers.Main).launch {
+                                        delay(2000) // 2 secondes pour lire le message
+                                        drawingViewModel.clearStrokes(gameId) // Le listener gérera strokes.clear()
+                                        delay(500) // Petit délai pour que Firebase synchronise
+                                        gameViewModel.nextTurn(gameId) { newWord ->
+                                            // Le nouveau mot est défini dans Firebase
+                                        }
+                                    }
+                                } else {
+                                    // Mauvaise réponse
+                                    val wrongMessage = ChatMessage(
+                                        userId = uid,
+                                        message = "❌ $guess",
+                                        timestamp = System.currentTimeMillis()
+                                    )
+                                    chatViewModel.sendMessage(gameId, wrongMessage)
+                                    guessText = ""
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Deviner")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // CHAT (séparé de la devinette)
         Text("Chat", style = MaterialTheme.typography.titleMedium)
         Box(
             modifier = Modifier
@@ -159,7 +305,6 @@ fun GameScreen(
                         var displayName by remember { mutableStateOf(msg.userId) }
 
                         LaunchedEffect(msg.userId) {
-                            // Récupérer le pseudo depuis le cache ou DB
                             if (usernameCache.containsKey(msg.userId)) {
                                 displayName = usernameCache[msg.userId]!!
                             } else {
@@ -172,7 +317,7 @@ fun GameScreen(
                         Column(modifier = Modifier.padding(vertical = 4.dp)) {
                             Text(text = displayName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text(text = msg.message)
-                            Divider(modifier = Modifier.padding(top = 4.dp))
+                            HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
                         }
                     }
                 }
@@ -181,33 +326,34 @@ fun GameScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // Zone de saisie du chat (optionnel - pour discuter)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth()
         ) {
             OutlinedTextField(
-                value = messageText,
-                onValueChange = { messageText = it },
+                value = chatText,
+                onValueChange = { chatText = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text("Écrire un message...") }
+                placeholder = { Text("Message...") },
+                singleLine = true
             )
             Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
                     val uid = currentUser?.uid ?: return@Button
-                    if (messageText.isNotBlank()) {
+                    if (chatText.isNotBlank()) {
                         val chatMessage = ChatMessage(
                             userId = uid,
-                            message = messageText.trim(),
+                            message = chatText.trim(),
                             timestamp = System.currentTimeMillis()
                         )
-                        // use ChatViewModel to send message
                         chatViewModel.sendMessage(gameId, chatMessage)
-                        messageText = ""
+                        chatText = ""
                     }
                 }
             ) {
-                Text("Envoyer")
+                Text("💬")
             }
         }
     }
