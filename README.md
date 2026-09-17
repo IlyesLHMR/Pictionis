@@ -3,7 +3,6 @@
 Application Android multijoueur inspirée de Pictionary : un joueur dessine
 un mot secret, les autres tentent de le deviner en temps réel.
 
-![Aperçu de Pictionis](docs/apercu.png)
 
 ## Fonctionnalités
 
